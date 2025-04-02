@@ -176,20 +176,20 @@ services:
   #     airflow-init:
   #       condition: service_completed_successfully
 
-  # airflow-triggerer:
-  #   <<: *airflow-common
-  #   command: triggerer
-  #   healthcheck:
-  #     test: ["CMD-SHELL", 'airflow jobs check --job-type TriggererJob --hostname "$${HOSTNAME}"']
-  #     interval: 30s
-  #     timeout: 10s
-  #     retries: 5
-  #     start_period: 30s
-  #   restart: always
-  #   depends_on:
-  #     <<: *airflow-common-depends-on
-  #     airflow-init:
-  #       condition: service_completed_successfully
+  airflow-triggerer:
+     <<: *airflow-common
+     command: triggerer
+     healthcheck:
+       test: ["CMD-SHELL", 'airflow jobs check --job-type TriggererJob --hostname "$${HOSTNAME}"']
+       interval: 30s
+       timeout: 10s
+       retries: 5
+       start_period: 30s
+     restart: always
+     depends_on:
+       <<: *airflow-common-depends-on
+       airflow-init:
+         condition: service_completed_successfully
 
   airflow-init:
     <<: *airflow-common
@@ -306,6 +306,19 @@ services:
     restart: always
     ports:
       - 8090:8080
+  
+  streamlit:
+    image: python:3.10
+    volumes:
+      - ${AIRFLOW_PROJ_DIR:-.}/dashboard:/app
+      - ${AIRFLOW_PROJ_DIR:-.}/dags:/dags  
+    working_dir: /app
+    ports:
+      - "8501:8501"
+    #command: bash -c "pip install streamlit pandas matplotlib && streamlit run aqi_dashboard.py --server.port=8501 --server.address=0.0.0.0"
+    command: bash -c "pip install streamlit pandas matplotlib psycopg2-binary && streamlit run aqi_dashboard.py --server.port=8501 --server.address=0.0.0.0"
+    depends_on:
+      - airflow-webserver
 
   mailhog:
     image: mailhog/mailhog

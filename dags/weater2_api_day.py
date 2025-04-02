@@ -10,25 +10,19 @@ from airflow.utils import timezone
 
 # --------- CONFIG ---------
 API_KEY = Variable.get("airvisual_api_key")
-API_URL = "https://api.airvisual.com/v2/city"
 CITY = "Bangkok"
 STATE = "Bangkok"
 COUNTRY = "Thailand"
 DAG_FOLDER = "/opt/airflow/dags"
-DATA_FILE = f"{DAG_FOLDER}/aqi_data.json"
+DATA_FILE = f"{DAG_FOLDER}/aqi_data1.json"
 
 # --------- TASK 1: Extract ---------
 def extract_aqi():
-    params = {
-        "city": CITY,
-        "state": STATE,
-        "country": COUNTRY,
-        "key": API_KEY
-    }
-    response = requests.get(API_URL, params=params)
+    url = f"https://api.airvisual.com/v2/city?city={CITY}&state={STATE}&country={COUNTRY}&key={API_KEY}"
+    response = requests.get(url)
     response.raise_for_status()
     data = response.json()
-    print(data)
+    print("API Response:", data)
     with open(DATA_FILE, "w") as f:
         json.dump(data, f)
 
@@ -63,7 +57,7 @@ def transform_aqi_data():
 
 # --------- TASK 4: Create Table ---------
 def create_aqi_table():
-    pg_hook = PostgresHook(postgres_conn_id="weather1_postgres_conn", schema="postgres")
+    pg_hook = PostgresHook(postgres_conn_id="weather2_postgres_conn", schema="postgres")
     connection = pg_hook.get_conn()
     cursor = connection.cursor()
 
@@ -77,13 +71,12 @@ def create_aqi_table():
         )
     """)
     connection.commit()
-
 # --------- TASK 5: Load ---------
 def load_to_postgres():
     with open(DATA_FILE, "r") as f:
         data = json.load(f)
 
-    pg_hook = PostgresHook(postgres_conn_id="weather1_postgres_conn", schema="postgres")
+    pg_hook = PostgresHook(postgres_conn_id="weather2_postgres_conn", schema="postgres")
     connection = pg_hook.get_conn()
     cursor = connection.cursor()
 
@@ -102,24 +95,15 @@ def load_to_postgres():
     connection.commit()
 
 # --------- DAG ---------
-default_args = {
-    "email": ["youremail@example.com"],
-    "retries": 2,
-    "retry_delay": timedelta(minutes=2),
-}
-
 with DAG(
-    "weather1_aqi_dag",
-    default_args=default_args,
-    #schedule="0 7 * * *",  # 
-    schedule="0 */3 * * *",  # รันทุก 3 ชม
+    "weater2_api_day",  # 
     start_date=timezone.datetime(2025, 2, 1),
+    schedule="0 */3 * * *",   
     catchup=False,
     tags=["dpu", "capstone", "aqi"],
 ) as dag:
 
     start = EmptyOperator(task_id="start")
-
     t1 = PythonOperator(task_id="extract_aqi", python_callable=extract_aqi)
     t2 = PythonOperator(task_id="validate_aqi_data", python_callable=validate_aqi_data)
     t3 = PythonOperator(task_id="transform_aqi_data", python_callable=transform_aqi_data)
@@ -129,3 +113,5 @@ with DAG(
     end = EmptyOperator(task_id="end")
 
     start >> t1 >> t2 >> t3 >> t4 >> t5 >> end
+
+    

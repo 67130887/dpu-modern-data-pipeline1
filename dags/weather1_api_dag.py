@@ -110,7 +110,7 @@ default_args = {
 with DAG(
     "weather1_aqi_dag",
     default_args=default_args,
-    #schedule="0 7 * * *",  # รันทุก 3 ชม
+    #schedule="0 7 * * *",  # 
     schedule="0 */3 * * *",  # รันทุก 3 ชม
     start_date=timezone.datetime(2025, 2, 1),
     catchup=False,

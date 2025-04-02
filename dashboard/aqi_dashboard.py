@@ -1,54 +1,61 @@
 import streamlit as st
 import pandas as pd
 import psycopg2
+from datetime import datetime, timedelta
 import matplotlib.pyplot as plt
 
-# -------------------- Config --------------------
-st.set_page_config(
-    page_title="Bangkok AQI Dashboard",
-    layout="wide",
-    initial_sidebar_state="expanded"
+# -------------------- Connect PostgreSQL --------------------
+conn = psycopg2.connect(
+    host="db",
+    database="postgres",
+    user="postgres",
+    password="postgres",
+    port="5432"
 )
 
-# -------------------- Sidebar --------------------
-st.sidebar.header("AQI Dashboard Settings")
+query = "SELECT * FROM bangkok_aqi ORDER BY timestamp DESC"
+df = pd.read_sql_query(query, conn)
+df['timestamp'] = pd.to_datetime(df['timestamp'])
 
-# -------------------- Connect PostgreSQL --------------------
-@st.cache_resource
-def get_data():
-    conn = psycopg2.connect(
-        host="db",          # ชื่อ service ใน docker-compose
-        database="postgres",
-        user="postgres",
-        password="postgres",
-        port=5432
-    )
-    sql = "SELECT * FROM bangkok_aqi ORDER BY timestamp DESC"
-    df = pd.read_sql(sql, conn)
-    conn.close()
-    return df
+st.title("Bangkok AQI Dashboard")
 
-df = get_data()
+# -------------------- Summary Section --------------------
+st.header("Summary Report")
 
-# -------------------- Dashboard --------------------
-st.title("Bangkok Air Quality Index (AQI) Dashboard")
-st.markdown("""<small>Data Source: AirVisual API → PostgreSQL</small>""", unsafe_allow_html=True)
+# Filter Data
+today = datetime.now()
+week_start = today - timedelta(days=today.weekday())
+three_months_ago = today - timedelta(days=90)
 
-# -------------------- KPI --------------------
-col1, col2, col3, col4 = st.columns(4)
-col1.metric("Latest AQI", df.iloc[0]['aqi'])
-col2.metric("Latest Temp (°C)", df.iloc[0]['temperature'])
-col3.metric("Latest Humidity (%)", df.iloc[0]['humidity'])
-col4.metric("Latest PM2.5", df.iloc[0]['pm2_5'] if df.iloc[0]['pm2_5'] else "N/A")
+df_week = df[df['timestamp'] >= week_start]
+df_3months = df[df['timestamp'] >= three_months_ago]
 
-st.markdown("---")
+# 1. Highest AQI this week
+highest_aqi_week = df_week['aqi'].max()
+
+# 2. Lowest AQI in last 3 months
+lowest_aqi_3months = df_3months['aqi'].min()
+
+# 3. Average AQI this week
+average_aqi_week = df_week['aqi'].mean()
+
+# Display
+col1, col2, col3 = st.columns(3)
+col1.metric("Highest AQI this week", f"{highest_aqi_week}")
+col2.metric("Lowest AQI (last 3 months)", f"{lowest_aqi_3months}")
+col3.metric("Average AQI this week", f"{average_aqi_week:.2f}")
 
 # -------------------- Line Chart --------------------
-st.subheader("Trend: AQI / Temperature / Humidity")
+st.subheader("Trend AQI / Temperature / Humidity")
 st.line_chart(df.set_index("timestamp")[['aqi', 'temperature', 'humidity']])
 
-# -------------------- Optional --------------------
-st.subheader("Raw Data")
-st.dataframe(df)
+# -------------------- Extra Chart --------------------
+st.subheader("AQI Time Series (Past 3 Months)")
+plt.figure(figsize=(10,5))
+plt.plot(df_3months['timestamp'], df_3months['aqi'], marker='o')
+plt.xlabel("Date")
+plt.ylabel("AQI")
+plt.grid(True)
+st.pyplot(plt)
 
-st.success("Dashboard Loaded Successfully")
+conn.close()
